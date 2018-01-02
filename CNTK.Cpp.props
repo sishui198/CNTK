@@ -6,7 +6,6 @@
     <CudaVersion Condition="Exists('$(CUDA_PATH_V9_0)') And '$(CudaVersion)' == ''">9.0</CudaVersion>
 
     <NvmlDll>%ProgramW6432%\NVIDIA Corporation\NVSMI\nvml.dll</NvmlDll>
-    <NvmlDll Condition="Exists('c:\local\bindrop\NVSMI\nvml.dll')">c:\local\bindrop\NVSMI\nvml.dll</NvmlDll>
 
     <HasOpenCv>false</HasOpenCv>
     <HasOpenCv Condition="Exists('$(OPENCV_PATH)') Or Exists('$(OPENCV_PATH_V31)')">true</HasOpenCv>
