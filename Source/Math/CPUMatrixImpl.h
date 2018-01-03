@@ -897,7 +897,7 @@ void CPUMatrix<ElemType>::SetValue(const size_t numRows, const size_t numCols, E
             {
                 ElemType* bufPtr = Data();
                 auto& us = *this;
-                if (sizeof(ElemType) == sizeof(double))
+                if (std::is_same<ElemType, double>::value)
                 {
 #pragma omp parallel for
                     foreach_column (j, us)
@@ -905,7 +905,7 @@ void CPUMatrix<ElemType>::SetValue(const size_t numRows, const size_t numCols, E
                         cblas_dcopy((int) numRows, reinterpret_cast<double*>(pArray + j), (int) numCols, reinterpret_cast<double*>(bufPtr + LocateColumn(j)), 1);
                     }
                 }
-                else
+                else if (std::is_same<ElemType, float>::value)
                 {
 #pragma omp parallel for
                     foreach_column (j, us)
@@ -915,6 +915,10 @@ void CPUMatrix<ElemType>::SetValue(const size_t numRows, const size_t numCols, E
                             cblas_scopy((int) numRows, reinterpret_cast<float*>(pArray + j), (int) numCols, reinterpret_cast<float*>(bufPtr + LocateColumn(j)), 1);
                         }
                     }
+                }
+                else
+                {
+                    RuntimeError("Unsupported data format");
                 }
             }
         }
@@ -3160,14 +3164,18 @@ ElemType CPUMatrix<ElemType>::SumOfAbsElements() const
     if (IsEmpty())
         LogicError("SumOfAbsElements: Matrix is empty.");
 
-    if (sizeof(ElemType) == sizeof(double))
+    if (std::is_same<ElemType, double>::value)
     {
         return (ElemType) cblas_dasum((int) GetNumElements(), reinterpret_cast<double*>(Data()), 1);
     }
-    else
+    else if (std::is_same<ElemType, float>::value)
     {
 #pragma warning(suppress : 4244)
         return cblas_sasum((int) GetNumElements(), reinterpret_cast<float*>(Data()), 1);
+    }
+    else
+    {
+        RuntimeError("Unsupported data format");
     }
 }
 
@@ -3409,7 +3417,7 @@ void CPUMatrix<ElemType>::VectorNorm2(CPUMatrix<ElemType>& c, const bool isColWi
     {
         c.RequireSize(1, n);
 
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -3417,7 +3425,7 @@ void CPUMatrix<ElemType>::VectorNorm2(CPUMatrix<ElemType>& c, const bool isColWi
                 c(0, j) = (ElemType) cblas_dnrm2(m, reinterpret_cast<double*>(bufPtr + us.LocateColumn(j)), 1);
             }
         }
-        else
+        else if(std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -3426,12 +3434,16 @@ void CPUMatrix<ElemType>::VectorNorm2(CPUMatrix<ElemType>& c, const bool isColWi
                 c(0, j) = cblas_snrm2(m, reinterpret_cast<float*>(bufPtr + us.LocateColumn(j)), 1);
             }
         }
+        else
+        {
+            RuntimeError("Unsupported data format");
+        }
     }
     else
     {
         c.RequireSize(m, 1);
 
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -3439,7 +3451,7 @@ void CPUMatrix<ElemType>::VectorNorm2(CPUMatrix<ElemType>& c, const bool isColWi
                 c(i, 0) = cblas_dnrm2(n, reinterpret_cast<double*>(bufPtr + i), m);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -3447,6 +3459,10 @@ void CPUMatrix<ElemType>::VectorNorm2(CPUMatrix<ElemType>& c, const bool isColWi
 #pragma warning(suppress : 4244)
                 c(i, 0) = cblas_snrm2(n, reinterpret_cast<float*>(bufPtr + i), m);
             }
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
 }
@@ -5117,14 +5133,18 @@ void CPUMatrix<ElemType>::MultiplyAndWeightedAdd(ElemType alpha, const CPUMatrix
 
     if (pQuantizedMultiplier == nullptr)
     {
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
             cblas_dgemm((CBLAS_ORDER) (int)MatrixOrder::ColMajor, mklTransA, mklTransB, m, n, k, alpha, reinterpret_cast<double*>(a.Data()), lda, reinterpret_cast<double*>(b.Data()), ldb, beta, reinterpret_cast<double*>(c.Data()), ldc);
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma warning(suppress : 4244)
             cblas_sgemm((CBLAS_ORDER) (int)MatrixOrder::ColMajor, mklTransA, mklTransB, m, n, k, alpha, reinterpret_cast<float*>(a.Data()), lda, reinterpret_cast<float*>(b.Data()), ldb, beta, reinterpret_cast<float*>(c.Data()), ldc);
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
     else
@@ -5203,17 +5223,21 @@ void CPUMatrix<ElemType>::SVD(const CPUMatrix<ElemType>& A, CPUMatrix<ElemType>&
 #if CNTK_UWP
     RuntimeError("Error, LAPACKE_*gesvd is not supported for UWP.\n");
 #else
-    if (sizeof(ElemType) == sizeof(double))
+    if (std::is_same<ElemType, double>::value)
     {
         std::vector<double> superb(std::max(std::min(m, n) - 1, 1));
         info = LAPACKE_dgesvd((int) MatrixOrder::ColMajor, 'A', 'A', (int) m, (int) n, reinterpret_cast<double*>(A.Data()), (int) lda, reinterpret_cast<double*>(SIGMA.Data()),
             reinterpret_cast<double*>(U.Data()), (int) ldu, reinterpret_cast<double*>(VT.Data()), (int) ldvt, &superb[0]);
     }
-    else
+    else if (std::is_same<ElemType, float>::value)
     {
         std::vector<float> superb(std::max(std::min(m, n) - 1, 1));
         info = LAPACKE_sgesvd((int) MatrixOrder::ColMajor, 'A', 'A', (int) m, (int) n, reinterpret_cast<float*>(A.Data()), (int) lda, reinterpret_cast<float*>(SIGMA.Data()),
             reinterpret_cast<float*>(U.Data()), (int) ldu, reinterpret_cast<float*>(VT.Data()), (int) ldvt, &superb[0]);
+    }
+    else
+    {
+        RuntimeError("Unsupported data format");
     }
 #endif
 
@@ -5407,14 +5431,18 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
         if ((int) c.GetNumRows() != m || (int) c.GetNumCols() != n)
             InvalidArgument("Dimension of matrix c does not match dimension of matrix a.");
 
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
             cblas_daxpy(len, alpha, reinterpret_cast<double*>(a.Data()), incx, reinterpret_cast<double*>(c.Data()), incy);
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma warning(suppress : 4244)
             cblas_saxpy(len, alpha, reinterpret_cast<float*>(a.Data()), incx, reinterpret_cast<float*>(c.Data()), incy);
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
     else if (a.GetNumElements() == 1) // scalar, add to all elements
@@ -5447,7 +5475,7 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
 
         ElemType* aBufPtr = a.Data();
         ElemType* cBufPtr = c.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -5455,7 +5483,7 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
                 cblas_daxpy(m, alpha, reinterpret_cast<double*>(aBufPtr), 1, reinterpret_cast<double*>(cBufPtr + c.LocateColumn(j)), 1);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -5463,6 +5491,10 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
 #pragma warning(suppress : 4244)
                 cblas_saxpy(m, alpha, reinterpret_cast<float*>(aBufPtr), 1, reinterpret_cast<float*>(cBufPtr + c.LocateColumn(j)), 1);
             }
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
     else // row vector, add it to all rows
@@ -5474,7 +5506,7 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
 
         ElemType* aBufPtr = a.Data();
         ElemType* cBufPtr = c.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -5482,7 +5514,7 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
                 cblas_daxpy(n, alpha, reinterpret_cast<double*>(aBufPtr), 1, reinterpret_cast<double*>(cBufPtr + i), m);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -5490,6 +5522,10 @@ void CPUMatrix<ElemType>::ScaleAndAdd(ElemType alpha, const CPUMatrix<ElemType>&
 #pragma warning(suppress : 4244)
                 cblas_saxpy(n, alpha, reinterpret_cast<float*>(aBufPtr), 1, reinterpret_cast<float*>(cBufPtr + i), m);
             }
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
 }
@@ -5700,14 +5736,18 @@ template <class ElemType>
     {
         memset(a.Data(), 0, sizeof(ElemType) * len);
     }
-    else if (sizeof(ElemType) == sizeof(double))
+    else if (std::is_same<ElemType, double>::value)
     {
         cblas_dscal(len, alpha, reinterpret_cast<double*>(a.Data()), incx);
     }
-    else
+    else if (std::is_same<ElemType, float>::value)
     {
 #pragma warning(suppress : 4244)
         cblas_sscal(len, alpha, reinterpret_cast<float*>(a.Data()), incx);
+    }
+    else
+    {
+        RuntimeError("Unsupported data format");
     }
 }
 
@@ -5749,7 +5789,7 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
 
         ElemType* aBufPtr = a.Data();
         ElemType* bBufPtr = b.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -5757,7 +5797,7 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
                 c(0, j) = (ElemType) cblas_ddot(m, reinterpret_cast<double*>(aBufPtr + a.LocateColumn(j)), 1, reinterpret_cast<double*>(bBufPtr + b.LocateColumn(j)), 1);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_column (j, c)
@@ -5766,6 +5806,10 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
                 c(0, j) = (ElemType) cblas_sdot(m, reinterpret_cast<float*>(aBufPtr + a.LocateColumn(j)), 1, reinterpret_cast<float*>(bBufPtr + b.LocateColumn(j)), 1);
             }
         }
+        else
+        {
+            RuntimeError("Unsupported data format");
+        }
     }
     else
     {
@@ -5773,7 +5817,7 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
 
         ElemType* aBufPtr = a.Data();
         ElemType* bBufPtr = b.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -5781,7 +5825,7 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
                 c(i, 0) = cblas_ddot(n, reinterpret_cast<double*>(aBufPtr + i), m, reinterpret_cast<double*>(bBufPtr + i), m);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -5789,6 +5833,10 @@ void CPUMatrix<ElemType>::InnerProduct(const CPUMatrix<ElemType>& a, const CPUMa
 #pragma warning(suppress : 4244)
                 c(i, 0) = cblas_sdot(n, reinterpret_cast<float*>(aBufPtr + i), m, reinterpret_cast<float*>(bBufPtr + i), m);
             }
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
 }
@@ -5809,14 +5857,18 @@ ElemType CPUMatrix<ElemType>::InnerProductOfMatrices(const CPUMatrix<ElemType>& 
     if (m != k || n != l)
         InvalidArgument("InnerProductOfMatrices: Matrices a and b should have same dimension.");
 
-    if (sizeof(ElemType) == sizeof(double))
+    if (std::is_same<ElemType, double>::value)
     {
         return (ElemType) cblas_ddot((int) a.GetNumElements(), reinterpret_cast<double*>(a.Data()), 1, reinterpret_cast<double*>(b.Data()), 1);
     }
-    else
+    else if (std::is_same<ElemType, float>::value)
     {
 #pragma warning(suppress : 4244)
         return (ElemType) cblas_sdot((int) a.GetNumElements(), reinterpret_cast<float*>(a.Data()), 1, reinterpret_cast<float*>(b.Data()), 1);
+    }
+    else
+    {
+        RuntimeError("Unsupported data format");
     }
 }
 
@@ -6038,7 +6090,7 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
 
         ElemType* aBufPtr = a.Data();
         ElemType* bBufPtr = b.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
             for (long j = 0; j < n; j++)
             {
@@ -6052,7 +6104,7 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
                 }
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
             for (long j = 0; j < n; j++)
             {
@@ -6066,6 +6118,10 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
                 }
             }
         }
+        else
+        {
+            RuntimeError("Unsupported data format");
+        }
     }
     else
     {
@@ -6075,7 +6131,7 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
 
         ElemType* aBufPtr = a.Data();
         ElemType* bBufPtr = b.Data();
-        if (sizeof(ElemType) == sizeof(double))
+        if (std::is_same<ElemType, double>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -6083,7 +6139,7 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
                 c(i, 0) = (ElemType) cblas_ddot(n, reinterpret_cast<double*>(aBufPtr + i), m, reinterpret_cast<double*>(bBufPtr + i), m);
             }
         }
-        else
+        else if (std::is_same<ElemType, float>::value)
         {
 #pragma omp parallel for
             foreach_row (i, c)
@@ -6091,6 +6147,10 @@ void CPUMatrix<ElemType>::InnerProductWithShiftNeg(const CPUMatrix<ElemType>& a,
 #pragma warning(suppress : 4244)
                 c(i, 0) = cblas_sdot(n, reinterpret_cast<float*>(aBufPtr + i), m, reinterpret_cast<float*>(bBufPtr + i), m);
             }
+        }
+        else
+        {
+            RuntimeError("Unsupported data format");
         }
     }
 }

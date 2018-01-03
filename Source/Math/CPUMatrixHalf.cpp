@@ -7,6 +7,46 @@
 
 namespace Microsoft { namespace MSR { namespace CNTK {
 
+// General conversion function with no performance optimization
+// this should only be used in CPU half precision
+// For performance on inference on CPU, user should convert fp16 model to fp32 first, unless MKL supports half precision
+template<typename SrcT, typename DstT>
+static void ConvertBuffer(DstT* dst, const SrcT* src, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        dst[i] = (DstT)src[i];
+    }
+}
+
+// specialization to convert from half to float for computation, and then store in half
+template <>
+void CPUMatrix<half>::MultiplyAndWeightedAdd(half alpha, const CPUMatrix<half>& a, const bool transposeA, const CPUMatrix<half>& b, const bool transposeB,
+    half beta, CPUMatrix<half>& c, shared_ptr<QuantizedMultiplier<half>> pQuantizedMultiplier)
+{
+    CPUMatrix<float> af(a.GetNumRows(), a.GetNumCols());
+    CPUMatrix<float> bf(b.GetNumRows(), b.GetNumCols());
+    CPUMatrix<float> cf(c.GetNumRows(), c.GetNumCols());
+
+    if (alpha != 0)
+    {
+        ConvertBuffer<half, float>(af.Data(), a.Data(), a.GetNumElements());
+        ConvertBuffer<half, float>(bf.Data(), b.Data(), b.GetNumElements());
+    }
+
+    if (beta != 0)
+    {
+        ConvertBuffer<half, float>(cf.Data(), c.Data(), c.GetNumElements());
+    }
+
+    if (pQuantizedMultiplier)
+        RuntimeError("Quantized matrix multiply not supported for Half");
+
+    CPUMatrix<float>::MultiplyAndWeightedAdd((float)alpha, af, transposeA, bf, transposeB, (float)beta, cf, nullptr);
+
+    ConvertBuffer<float, half>(c.Data(), cf.Data(), c.GetNumElements());
+}
+
 // specialization to RunTimeError for now due to omp implementation only support build-in type
 template <>
 void CPUMatrix<half>::AssignSoftmaxSum(const CPUMatrix<half>& softmax, CPUMatrix<half>& c)
