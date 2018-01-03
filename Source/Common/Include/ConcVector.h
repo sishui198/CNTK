@@ -22,6 +22,10 @@ class conc_vector
 public:
     typedef typename std::vector<T>::value_type value_type;
 
+    conc_vector()
+    {
+    }
+
     value_type at_or_create(int i, std::function<value_type(int)> factory)
     {
         std::lock_guard<std::mutex> g(m_locker);
