@@ -663,6 +663,26 @@ public:
                 return;
             }
 
+            if (fr.IsBatchMatmul(inputMBLayout) && fr.IsBatchMatmul(InputRef(1).GetMBLayout()))
+            {
+                size_t rankA = InputRef(0).GetSampleLayout().GetRank();
+                size_t rankB = InputRef(1).GetSampleLayout().GetRank();
+                auto shapeC= GetSampleLayout();
+                size_t rankC = shapeC.GetRank();
+                size_t firstReducedDim = rankA - (rankA + rankB - rankC) / 2;
+                size_t m = 1;
+                size_t n = 1;
+                for (size_t i = 0; i < firstReducedDim; i++)
+                    m *= shapeC.GetDim(i);
+                for (size_t i = firstReducedDim; i < rankC; i++)
+                    n *= shapeC.GetDim(i);
+                Matrix<ElemType> value = ValueFor(fr);
+                Matrix<ElemType> input0 = InputRef(0).ValueFor(fr);
+                Matrix<ElemType> input1 = InputRef(1).ValueFor(fr);
+                Matrix<ElemType>::BatchMatMul(ElemType(0.0), input0, m_transpose, m, input1, false, n, value, true);
+                return;
+            }
+
             // recursively call ourselves for each individual time and sequence
 
             // note this is not performant, warn user about the slow path being used
@@ -725,6 +745,76 @@ public:
                 }
                 return;
             }
+
+            ElemType beta = Input(inputIndex)->IsGradientInitializedBy(this) ? (ElemType)0.0 : (ElemType)1.0;
+            if (inputIndex == 0)
+            {
+                if (fr.IsBatchMatmul(InputRef(0).GetMBLayout()) &&  fr.IsBatchMatmul(InputRef(1).GetMBLayout()))
+                {
+                    auto shapeA = InputRef(0).GetSampleLayout();
+                    size_t rankA = shapeA.GetRank();
+                    size_t rankB = InputRef(1).GetSampleLayout().GetRank();
+                    size_t rankC = GetSampleLayout().GetRank();
+                    size_t firstReducedDim = rankA - (rankA + rankB - rankC) / 2;
+                    size_t m = 1;
+                    size_t n = 1;
+                    if (m_transpose)
+                    {
+                        for (size_t i = 0; i < rankA - firstReducedDim; i++)
+                            m *= shapeA.GetDim(i);
+                        for (size_t i = rankA - firstReducedDim; i < rankA; i++)
+                            n *= shapeA.GetDim(i);
+                    }
+                    else
+                    {
+                        for (size_t i = 0; i < firstReducedDim; i++)
+                            m *= shapeA.GetDim(i);
+                        for (size_t i = firstReducedDim; i < rankA; i++)
+                            n *= shapeA.GetDim(i);
+                    }
+                    Matrix<ElemType> outputGradient = GradientFor(fr);
+                    Matrix<ElemType> input1 = InputRef(1).ValueFor(fr);
+                    Matrix<ElemType> input0Gradient = InputRef(0).GradientFor(fr);
+                    if (!m_transpose)
+                        Matrix<ElemType>::BatchMatMul(beta, outputGradient, false, m, input1, true, n, input0Gradient, true);
+                    else
+                        Matrix<ElemType>::BatchMatMul(beta, input1, false, m, outputGradient, true, n, input0Gradient, true);
+                    return;
+                }
+            }
+            else if (inputIndex == 1)
+            {
+                if (fr.IsBatchMatmul(InputRef(0).GetMBLayout()) &&  fr.IsBatchMatmul(InputRef(1).GetMBLayout()))
+                {
+                    auto shapeB = InputRef(1).GetSampleLayout();
+                    size_t rankA = InputRef(0).GetSampleLayout().GetRank();
+                    size_t rankB = shapeB.GetRank();
+                    size_t rankC = GetSampleLayout().GetRank();
+                    size_t secondReducedDim = rankB - (rankA + rankB - rankC) / 2;
+                    size_t m = 1;
+                    size_t n = 1;
+                    for (size_t i = 0; i < rankB - secondReducedDim; i++)
+                        m *= shapeB.GetDim(i);
+                    for (size_t i = rankB - secondReducedDim; i < rankB; i++)
+                        n *= shapeB.GetDim(i);
+
+                    Matrix<ElemType> input0 = InputRef(0).ValueFor(fr);
+                    Matrix<ElemType> input1Gradient = InputRef(1).GradientFor(fr);
+                    Matrix<ElemType> outputGradient = GradientFor(fr);
+
+                    if (input1Gradient.GetMatrixType() == SPARSE)
+                    {
+                        input1Gradient.SwitchToMatrixType(DENSE, matrixFormatDense, !Input(inputIndex)->IsGradientInitializedBy(this));
+                    }
+                    InputRef(1).SetPreferredGradientMatrixType(DENSE);
+
+                    Matrix<ElemType>::BatchMatMul(beta, input0, !m_transpose, m, outputGradient, false, n, input1Gradient, true);
+                }
+            }
+
+            // note this is not performant, warn user about the slow path being used
+            if (Base::HasEnvironmentPtr() && Base::Environment().traceLevel > 0)
+                std::call_once(m_unrollWarningOnceFlag, [this] { fprintf(stderr, "WARNING: %ls %ls operation: being unrolled in backprop, execution may be slow\n", NodeName().c_str(), OperationName().c_str()); });
 
             auto timeRange     = fr.GetTimeRange();
             auto sequenceRange = fr.GetSequenceRange();
