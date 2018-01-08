@@ -230,6 +230,9 @@ namespace CNTK
             // Gradients are not existing.
             for (const auto& parameter : m_learnerParameters)
                 gradients[parameter] = nullptr;
+
+            trainingLoss = MakeSharedObject<NDArrayView>(0, m_aggregatedLossFunction->Output().GetDataType(), NDShape{}, computeDevice);
+            evalCriterion = MakeSharedObject<NDArrayView>(0, m_aggregatedEvaluationFunction->Output().GetDataType(), NDShape{}, computeDevice);
         }
         else
         {
