@@ -36,7 +36,7 @@ namespace CNTK
         m_sampleCount = checkpoint[L"totalNumberOfSamplesSeen"].Value<size_t>();
     }
 
-    void DistributedLearnerBase::PrepaireZeroGradients(std::unordered_map<Parameter, NDArrayViewPtr>& gradientValues, MinibatchInfo& info)
+    void DistributedLearnerBase::PrepaireZeroGradients(std::unordered_map<Parameter, NDArrayViewPtr>& gradientValues)
     {
         // Need to initialize gradients to 0 in case when it is an empty minibatch.
         for (auto& g : gradientValues)
