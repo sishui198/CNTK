@@ -468,6 +468,7 @@ void ParityCandCppLSTMModel(DeviceDescriptor device, CNTK_DeviceDescriptor cdevi
     mask->Clear();
     auto threeFramesValue = MakeSharedObject<Value>(threeFramesData, mask);
 
+    // Make sure we variate the sequence size without reset.
     auto twoFramesShape = NDShape{ inputDim, numberOfFrames - 1, 1 };
     auto twoFramesData = MakeSharedObject<NDArrayView>(DataType::Float, twoFramesShape, inputData.data(), twoFramesShape.TotalSize() * sizeof(float), DeviceDescriptor::CPUDevice());
     auto twoFramesValue = MakeSharedObject<Value>(twoFramesData, MakeSharedObject<NDMask>(NDShape{ numberOfFrames - 1, 1 }));
