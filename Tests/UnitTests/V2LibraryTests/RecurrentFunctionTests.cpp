@@ -749,6 +749,9 @@ BOOST_AUTO_TEST_CASE(TestParityCandCppLSTMModel)
                 count++;
             }
         BOOST_REQUIRE(count == 1);
+        CNTK_DeviceDescriptor deflt{};
+        CNTK_DefaultDevice(&deflt);
+        BOOST_REQUIRE(deflt.id == CNTK_DeviceKind_GPU);
         ParityCandCppLSTMModel(DeviceDescriptor::GPUDevice(0), gpu);
     }
 
