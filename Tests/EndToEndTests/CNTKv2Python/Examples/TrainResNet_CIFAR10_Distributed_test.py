@@ -37,6 +37,7 @@ def test_cifar_resnet_distributed(device_id):
 
 def test_cifar_resnet_distributed_fp16(device_id):
     # Skip test if not on Linux as NCCL is not available for Windows, and fp16 aggregation needs it
+    import platform
     if platform.system() != 'Linux':
         pytest.skip('test only runs on Linux (NCCL dependency)')
     params = [ "-e", "2",
